@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop Chat Widget</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+    /* ── Floating Trigger Button ────────────────────────────────────────── */
+    #chat-trigger {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background-color: var(--primary);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+      z-index: 99998;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    #chat-trigger:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.28); }
+    #chat-trigger svg { width: 28px; height: 28px; fill: #fff; }
+
+    /* ── Chat Panel ─────────────────────────────────────────────────────── */
+    #chat-panel {
+      position: fixed;
+      bottom: 96px;
+      right: 24px;
+      width: 370px;
+      height: 500px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 99999;
+      transform: translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.22s ease;
+    }
+    #chat-panel.open {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    #chat-header {
+      background-color: var(--primary);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #chat-header-left { display: flex; align-items: center; gap: 10px; }
+    #chat-store-name { color: #fff; font-weight: 600; font-size: 15px; }
+    #chat-status { display: flex; align-items: center; gap: 5px; }
+    #chat-status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #4ade80;
+    }
+    #chat-status-text { color: rgba(255,255,255,0.85); font-size: 12px; }
+    #chat-close {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: rgba(255,255,255,0.8); font-size: 20px; line-height: 1;
+      transition: color 0.15s;
+    }
+    #chat-close:hover { color: #fff; }
+
+    /* ── Message Thread ──────────────────────────────────────────────────── */
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    #chat-messages::-webkit-scrollbar { width: 5px; }
+    #chat-messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+
+    /* ── Bubbles ─────────────────────────────────────────────────────────── */
+    .msg-row { display: flex; flex-direction: column; max-width: 82%; }
+    .msg-row.user { align-self: flex-end; align-items: flex-end; }
+    .msg-row.bot  { align-self: flex-start; align-items: flex-start; }
+
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background-color: var(--primary);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.bot .msg-bubble {
+      background-color: #f1f5f9;
+      color: #1e293b;
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-time {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+
+    /* ── Typing Indicator ────────────────────────────────────────────────── */
+    #typing-indicator {
+      display: none;
+      align-self: flex-start;
+    }
+    #typing-indicator.visible { display: flex; }
+    .typing-bubble {
+      background: #f1f5f9;
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #94a3b8;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
+    }
+
+    /* ── Input Row ────────────────────────────────────────────────────────── */
+    #chat-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid #e2e8f0;
+      background: #fff;
+      flex-shrink: 0;
+    }
+    #chat-input {
+      flex: 1;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 9px 14px;
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      height: 38px;
+      max-height: 90px;
+      overflow-y: auto;
+      transition: border-color 0.15s;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+    #chat-input:focus { border-color: var(--primary); }
+    #chat-input:disabled { background: #f8fafc; color: #94a3b8; }
+
+    #upload-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      color: #94a3b8;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    #upload-btn:hover { color: var(--primary); background: #f1f5f9; }
+    #upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #upload-btn svg { width: 18px; height: 18px; }
+
+    #send-btn {
+      background-color: var(--primary);
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    #send-btn:hover { opacity: 0.88; transform: scale(1.06); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    #send-btn svg { width: 17px; height: 17px; fill: #fff; }
+
+    #file-input { display: none; }
+
+    /* ── Mobile ──────────────────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      #chat-panel {
+        width: 100vw;
+        right: 0;
+        bottom: 0;
+        border-radius: 16px 16px 0 0;
+        height: 85vh;
+      }
+      #chat-trigger { bottom: 16px; right: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Floating trigger button ───────────────────────────────────────────── -->
+<button id="chat-trigger" aria-label="Open chat assistant" title="Chat with us">
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M20 2H4C2.9 2 2 2.9 2 4v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H6l-2 2V4h16v10z"/>
+  </svg>
+</button>
+
+<!-- ── Chat panel ─────────────────────────────────────────────────────────── -->
+<div id="chat-panel" role="dialog" aria-label="Chat assistant" aria-modal="true">
+
+  <!-- Header -->
+  <div id="chat-header">
+    <div id="chat-header-left">
+      <div>
+        <div id="chat-store-name"></div>
+        <div id="chat-status">
+          <div id="chat-status-dot"></div>
+          <span id="chat-status-text">Online</span>
+        </div>
+      </div>
+    </div>
+    <button id="chat-close" aria-label="Close chat">&times;</button>
+  </div>
+
+  <!-- Messages -->
+  <div id="chat-messages" aria-live="polite">
+    <!-- Typing indicator lives here but is appended by JS -->
+    <div id="typing-indicator">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input row -->
+  <div id="chat-input-row">
+    <textarea
+      id="chat-input"
+      placeholder="Ask about our products…"
+      aria-label="Chat message"
+      rows="1"
+    ></textarea>
+    <input id="file-input" type="file" accept=".pdf,.txt,.csv" />
+    <button id="upload-btn" aria-label="Upload knowledge file" title="Upload a PDF, TXT, or CSV file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+      </svg>
+    </button>
+    <button id="send-btn" aria-label="Send message">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+
+</div>
+
+<script>
+  // ── CONFIG — edit these before embedding ──────────────────────────────────
+  const CONFIG = {
+    backendUrl: 'YOUR_VERCEL_URL_HERE',   // e.g. https://your-app.vercel.app  (no trailing slash)
+    storeName: 'My Store',                // Your store's display name
+    welcomeMessage: 'Hi! I am your shopping assistant. Ask me anything about our products, prices, or availability!',
+    primaryColor: '#6366f1',
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Apply primary colour via CSS custom property
+  document.documentElement.style.setProperty('--primary', CONFIG.primaryColor);
+  document.getElementById('chat-store-name').textContent = CONFIG.storeName;
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let conversationHistory = [];
+  let panelOpen = false;
+  let hasGreeted = false;
+  let isBusy = false;
+
+  // ── Element refs ──────────────────────────────────────────────────────────
+  const panel       = document.getElementById('chat-panel');
+  const trigger     = document.getElementById('chat-trigger');
+  const closeBtn    = document.getElementById('chat-close');
+  const messagesEl  = document.getElementById('chat-messages');
+  const inputEl     = document.getElementById('chat-input');
+  const sendBtn     = document.getElementById('send-btn');
+  const uploadBtn   = document.getElementById('upload-btn');
+  const fileInput   = document.getElementById('file-input');
+  const typingEl    = document.getElementById('typing-indicator');
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function formatTime(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function appendMessage(role, text) {
+    const row = document.createElement('div');
+    row.className = `msg-row ${role === 'user' ? 'user' : 'bot'}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = text;
+
+    const time = document.createElement('div');
+    time.className = 'msg-time';
+    time.textContent = formatTime(new Date());
+
+    row.appendChild(bubble);
+    row.appendChild(time);
+
+    // Insert before the typing indicator so it stays at the bottom
+    messagesEl.insertBefore(row, typingEl);
+    scrollToBottom();
+    return row;
+  }
+
+  function showTyping() {
+    typingEl.classList.add('visible');
+    scrollToBottom();
+  }
+
+  function hideTyping() {
+    typingEl.classList.remove('visible');
+  }
+
+  function setInputDisabled(disabled) {
+    inputEl.disabled = disabled;
+    sendBtn.disabled = disabled;
+    uploadBtn.disabled = disabled;
+    isBusy = disabled;
+  }
+
+  // ── Panel open / close ────────────────────────────────────────────────────
+  function openPanel() {
+    panelOpen = true;
+    panel.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+    inputEl.focus();
+
+    if (!hasGreeted) {
+      hasGreeted = true;
+      appendMessage('bot', CONFIG.welcomeMessage);
+    }
+  }
+
+  function closePanel() {
+    panelOpen = false;
+    panel.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+
+  trigger.addEventListener('click', () => (panelOpen ? closePanel() : openPanel()));
+  closeBtn.addEventListener('click', closePanel);
+
+  // ── Send a chat message ───────────────────────────────────────────────────
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || isBusy) return;
+
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    appendMessage('user', text);
+    setInputDisabled(true);
+    showTyping();
+
+    // Add to history before sending
+    conversationHistory.push({ role: 'user', content: text });
+
+    try {
+      const response = await fetch(`${CONFIG.backendUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          history: conversationHistory.slice(-10), // send last 10 turns
+        }),
+      });
+
+      const data = await response.json();
+
+      hideTyping();
+
+      const reply = data.reply || 'I did not get a response. Please try again.';
+      appendMessage('bot', reply);
+
+      // Add assistant reply to history
+      conversationHistory.push({ role: 'model', content: reply });
+    } catch (err) {
+      hideTyping();
+      appendMessage('bot', 'Connection error. Please check your internet and try again.');
+      // Remove the user turn we optimistically added since it failed
+      conversationHistory.pop();
+    } finally {
+      setInputDisabled(false);
+      inputEl.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Auto-resize textarea
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 90) + 'px';
+  });
+
+  // ── File upload ───────────────────────────────────────────────────────────
+  uploadBtn.addEventListener('click', () => {
+    if (!isBusy) fileInput.click();
+  });
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    // Reset input so the same file can be re-selected if needed
+    fileInput.value = '';
+
+    setInputDisabled(true);
+    appendMessage('bot', 'Uploading your file, please wait…');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${CONFIG.backendUrl}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        appendMessage(
+          'bot',
+          'Your file has been loaded! I will now use it as a reference when answering your questions.'
+        );
+      } else {
+        appendMessage(
+          'bot',
+          data.error ||
+            'Sorry, I could not upload that file. Please make sure it is a PDF, TXT, or CSV under 10MB.'
+        );
+      }
+    } catch (err) {
+      appendMessage(
+        'bot',
+        'Sorry, I could not upload that file. Please make sure it is a PDF, TXT, or CSV under 10MB.'
+      );
+    } finally {
+      setInputDisabled(false);
+      inputEl.focus();
+    }
+  });
+</script>
+</body>
+</html>

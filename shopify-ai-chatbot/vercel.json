@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 30
+    },
+    "api/upload.js": {
+      "maxDuration": 30
+    },
+    "api/products.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/widget", "destination": "/widget/chat-widget.html" }
+  ]
+}

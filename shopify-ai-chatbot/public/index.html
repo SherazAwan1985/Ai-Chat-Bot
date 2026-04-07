@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopify AI Chatbot — Local Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f8fafc;
+      color: #1e293b;
+      text-align: center;
+      padding: 24px;
+    }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    p  { font-size: 15px; color: #64748b; max-width: 420px; line-height: 1.6; }
+    .badge {
+      margin-top: 20px;
+      display: inline-block;
+      background: #6366f1;
+      color: #fff;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Shopify AI Chatbot — Local Test</h1>
+  <p>Open the chat bubble in the bottom right to test your chatbot.<br/>
+     Make sure <code>vercel dev</code> is running and your <code>.env.local</code> is configured.</p>
+  <span class="badge">Powered by Gemini + Shopify</span>
+
+  <!--
+    The widget is served at /widget by the Vercel rewrite rule.
+    We embed it directly here for local testing.
+  -->
+  <script>
+    // Dynamically inject the widget iframe so this page works at any origin
+    const iframe = document.createElement('iframe');
+    iframe.src = '/widget/chat-widget.html';
+    iframe.style.cssText =
+      'position:fixed;bottom:0;right:0;width:420px;height:560px;border:none;z-index:99999;';
+    iframe.title = 'Chat Widget';
+    document.body.appendChild(iframe);
+  </script>
+</body>
+</html>
