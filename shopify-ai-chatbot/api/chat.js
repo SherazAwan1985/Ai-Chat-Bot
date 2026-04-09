@@ -1,12 +1,31 @@
 /**
  * POST /api/chat
  * Main chat endpoint. Fetches live Shopify products, loads custom knowledge
- * from Vercel KV, then passes everything to Gemini for a response.
+ * from Vercel Blob, then passes everything to Gemini for a response.
  */
 
-const { kv } = require('@vercel/kv');
+const { list } = require('@vercel/blob');
 const { getProductsText } = require('../services/shopifyService');
 const gemini = require('../services/gemini');
+
+const BLOB_FILENAME = 'custom-knowledge.txt';
+
+/**
+ * Fetch the custom knowledge text stored in Vercel Blob.
+ * Returns an empty string if no file has been uploaded yet.
+ * @returns {Promise<string>}
+ */
+async function getCustomKnowledge() {
+  try {
+    const { blobs } = await list({ prefix: BLOB_FILENAME });
+    if (!blobs.length) return '';
+    const response = await fetch(blobs[0].url);
+    if (!response.ok) return '';
+    return await response.text();
+  } catch {
+    return '';
+  }
+}
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -37,7 +56,7 @@ function parseBody(req) {
   });
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   setCorsHeaders(res);
 
   // Handle CORS preflight
@@ -69,7 +88,7 @@ export default async function handler(req, res) {
     // ── Gather context ──────────────────────────────────────────────────────
     const [productsText, customKnowledge] = await Promise.all([
       getProductsText(),
-      kv.get('custom_knowledge').catch(() => null),
+      getCustomKnowledge(),
     ]);
 
     // ── Generate AI reply ───────────────────────────────────────────────────
@@ -77,7 +96,7 @@ export default async function handler(req, res) {
       message.trim(),
       conversationHistory,
       productsText,
-      customKnowledge || ''
+      customKnowledge
     );
 
     console.log(`[CHAT] Reply sent: "${reply.slice(0, 80)}${reply.length > 80 ? '...' : ''}"`);

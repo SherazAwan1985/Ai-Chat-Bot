@@ -1,0 +1,76 @@
+{% comment %}
+  AI Chat Widget — Theme App Extension Block
+  Enable this block in Online Store > Themes > Customize > App embeds
+  Backend URL is fixed to the deployed Vercel instance.
+{% endcomment %}
+
+{{ 'ai-chatbot.css' | asset_url | stylesheet_tag }}
+
+<div
+  id="aic-root"
+  data-backend-url="https://shopify-ai-chatbot-five.vercel.app"
+  data-store-name="{{ block.settings.store_name | default: shop.name | escape }}"
+  data-welcome-message="{{ block.settings.welcome_message | escape }}"
+  data-primary-color="{{ block.settings.primary_color }}"
+  data-position="{{ block.settings.position }}"
+  data-show-on-mobile="{{ block.settings.show_on_mobile }}"
+  {{ block.shopify_attributes }}
+></div>
+
+<script src="{{ 'ai-chatbot.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "AI Chat Widget",
+  "target": "body",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Widget Content"
+    },
+    {
+      "type": "text",
+      "id": "store_name",
+      "label": "Store Name",
+      "info": "Displayed in the chat widget header. Defaults to your Shopify store name.",
+      "placeholder": "My Store"
+    },
+    {
+      "type": "textarea",
+      "id": "welcome_message",
+      "label": "Welcome Message",
+      "default": "Hi! I am your shopping assistant. Ask me anything about our products, prices, or availability!"
+    },
+    {
+      "type": "header",
+      "content": "Appearance"
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Color",
+      "default": "#6366f1"
+    },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Widget Position",
+      "options": [
+        { "value": "right", "label": "Bottom Right" },
+        { "value": "left",  "label": "Bottom Left" }
+      ],
+      "default": "right"
+    },
+    {
+      "type": "header",
+      "content": "Visibility"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_on_mobile",
+      "label": "Show on Mobile",
+      "default": true
+    }
+  ]
+}
+{% endschema %}

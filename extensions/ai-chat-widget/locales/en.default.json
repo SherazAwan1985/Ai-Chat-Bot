@@ -1,0 +1,32 @@
+{
+  "blocks": {
+    "chat_widget": {
+      "name": "AI Chat Widget"
+    }
+  },
+  "settings": {
+    "backend_url": {
+      "label": "Vercel Backend URL",
+      "info": "Your deployed Vercel chatbot URL, e.g. https://your-app.vercel.app (no trailing slash)"
+    },
+    "store_name": {
+      "label": "Store Name"
+    },
+    "welcome_message": {
+      "label": "Welcome Message"
+    },
+    "primary_color": {
+      "label": "Primary Color"
+    },
+    "position": {
+      "label": "Widget Position",
+      "options": {
+        "bottom_right": "Bottom Right",
+        "bottom_left": "Bottom Left"
+      }
+    },
+    "show_on_mobile": {
+      "label": "Show on Mobile"
+    }
+  }
+}

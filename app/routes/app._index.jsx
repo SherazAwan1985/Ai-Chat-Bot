@@ -1,238 +1,174 @@
-import { useEffect } from "react";
-import { useFetcher } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-
-  return null;
-};
-
-export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
-  const product = responseJson.data.productCreate.product;
-  const variantId = product.variants.edges[0].node.id;
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
+
+  // Fetch store info and product count
+  const res = await admin.graphql(`#graphql
+    query DashboardData {
+      shop {
+        name
+        myshopifyDomain
       }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
-  const variantResponseJson = await variantResponse.json();
+      productsCount { count }
+    }
+  `);
+  const { data } = await res.json();
+
+  const hasBackendUrl = !!process.env.CHATBOT_BACKEND_URL;
 
   return {
-    product: responseJson.data.productCreate.product,
-    variant: variantResponseJson.data.productVariantsBulkUpdate.productVariants,
+    shop: data?.shop ?? {},
+    productCount: data?.productsCount?.count ?? 0,
+    hasBackendUrl,
+    backendUrl: process.env.CHATBOT_BACKEND_URL || "",
   };
 };
 
-export default function Index() {
-  const fetcher = useFetcher();
-  const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+export default function Dashboard() {
+  const { shop, productCount, hasBackendUrl, backendUrl } = useLoaderData();
 
-  useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
-    }
-  }, [fetcher.data?.product?.id, shopify]);
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  const steps = [
+    {
+      done: true,
+      label: "Install the app",
+      detail: "You're here — the app is installed and running.",
+    },
+    {
+      done: hasBackendUrl,
+      label: "Deploy chatbot backend to Vercel",
+      detail: hasBackendUrl
+        ? `Connected: ${backendUrl}`
+        : "Deploy the shopify-ai-chatbot folder to Vercel, then add CHATBOT_BACKEND_URL to your app environment variables.",
+    },
+    {
+      done: false,
+      label: "Enable widget in theme customizer",
+      detail:
+        'Go to Online Store → Themes → Customize → App embeds → toggle on "AI Chat Widget".',
+    },
+    {
+      done: false,
+      label: "Set your Vercel URL in the block settings",
+      detail:
+        "Inside the theme customizer, open the AI Chat Widget block and paste your Vercel backend URL.",
+    },
+    {
+      done: false,
+      label: "(Optional) Upload a knowledge file",
+      detail:
+        "Visit the Knowledge Base page to upload a PDF, TXT, or CSV for extra AI context.",
+    },
+  ];
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
+    <s-page heading="AI Chatbot — Dashboard">
+      {/* ── Stats ── */}
+      <s-layout columns="3">
+        <s-box padding="base" border-width="base" border-radius="base">
+          <s-stack direction="block" gap="tight">
+            <s-text tone="subdued" size="small">Store</s-text>
+            <s-heading size="medium">{shop.name || "—"}</s-heading>
+            <s-text tone="subdued" size="small">{shop.myshopifyDomain}</s-text>
+          </s-stack>
+        </s-box>
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references.
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
+        <s-box padding="base" border-width="base" border-radius="base">
+          <s-stack direction="block" gap="tight">
+            <s-text tone="subdued" size="small">Products available to AI</s-text>
+            <s-heading size="medium">{productCount}</s-heading>
+            <s-text tone="subdued" size="small">
+              Fetched live on every chat message
+            </s-text>
+          </s-stack>
+        </s-box>
+
+        <s-box padding="base" border-width="base" border-radius="base">
+          <s-stack direction="block" gap="tight">
+            <s-text tone="subdued" size="small">Backend status</s-text>
+            <s-heading size="medium">
+              {hasBackendUrl ? "✅ Connected" : "⚠️ Not set"}
+            </s-heading>
+            <s-text tone="subdued" size="small">
+              {hasBackendUrl
+                ? "Vercel backend URL is configured"
+                : "Add CHATBOT_BACKEND_URL to env vars"}
+            </s-text>
+          </s-stack>
+        </s-box>
+      </s-layout>
+
+      {/* ── Setup checklist ── */}
+      <s-section heading="Setup Checklist">
+        <s-stack direction="block" gap="base">
+          {steps.map((step, i) => (
+            <s-box
+              key={i}
+              padding="base"
+              border-width="base"
+              border-radius="base"
             >
-              Edit product
-            </s-button>
-          )}
+              <s-stack direction="inline" gap="base">
+                <s-text size="large">{step.done ? "✅" : "⬜"}</s-text>
+                <s-stack direction="block" gap="extraTight">
+                  <s-text weight="bold">
+                    Step {i + 1}: {step.label}
+                  </s-text>
+                  <s-text tone="subdued" size="small">
+                    {step.detail}
+                  </s-text>
+                </s-stack>
+              </s-stack>
+            </s-box>
+          ))}
         </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
-
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
-        )}
       </s-section>
 
-      <s-section slot="aside" heading="App template specs">
-        <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
+      {/* ── Aside ── */}
+      <s-section slot="aside" heading="Quick Actions">
+        <s-stack direction="block" gap="base">
+          <s-button href="/app/knowledge" variant="secondary" full-width>
+            Upload Knowledge File
+          </s-button>
+          <s-button href="/app/setup" variant="secondary" full-width>
+            View Setup Guide
+          </s-button>
+        </s-stack>
       </s-section>
 
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
+      <s-section slot="aside" heading="How It Works">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            <s-text weight="bold">1. Live product data</s-text>
+            <br />
+            <s-text size="small" tone="subdued">
+              Your store's products are fetched on every customer question — always up to date.
+            </s-text>
+          </s-paragraph>
+          <s-paragraph>
+            <s-text weight="bold">2. Gemini AI answers</s-text>
+            <br />
+            <s-text size="small" tone="subdued">
+              Google Gemini reads the product data and replies in friendly, natural language.
+            </s-text>
+          </s-paragraph>
+          <s-paragraph>
+            <s-text weight="bold">3. Custom knowledge</s-text>
+            <br />
+            <s-text size="small" tone="subdued">
+              Upload a PDF, TXT, or CSV (FAQ, size guide, return policy) to give the AI extra context.
+            </s-text>
+          </s-paragraph>
+          <s-paragraph>
+            <s-text weight="bold">4. Zero performance impact</s-text>
+            <br />
+            <s-text size="small" tone="subdued">
+              Everything runs on Vercel serverless functions — completely separate from your store.
+            </s-text>
+          </s-paragraph>
+        </s-stack>
       </s-section>
     </s-page>
   );

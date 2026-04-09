@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm uninstall:*)",
+      "Bash(ls \"c:/Users/HP/Desktop/Ai Chat Bot\"/.env*)",
+      "Bash(npm run:*)",
+      "Bash(jobs -l)",
+      "Bash(npx vercel:*)",
+      "Bash(node -e ':*)"
+    ]
+  }
+}

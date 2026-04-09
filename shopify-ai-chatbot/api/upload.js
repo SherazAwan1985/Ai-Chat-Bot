@@ -1,18 +1,19 @@
 /**
- * POST /api/upload  — Accept a file upload, parse it, store text in Vercel KV.
+ * POST /api/upload  — Accept a file upload, parse it, store text in Vercel Blob.
  * GET  /api/upload  — Return whether custom knowledge data exists and its size.
  *
  * Accepted file types: application/pdf, text/plain, text/csv
  * Max file size: 10 MB
  */
 
-const { kv } = require('@vercel/kv');
+const { put, list } = require('@vercel/blob');
 const formidable = require('formidable');
 const fs = require('fs');
 const { parseFile } = require('../services/fileParser');
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain', 'text/csv'];
+const BLOB_FILENAME = 'custom-knowledge.txt';
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,10 +21,6 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-/**
- * Parse the incoming multipart request with formidable.
- * Returns { fields, files } or throws on validation failure.
- */
 function parseForm(req) {
   return new Promise((resolve, reject) => {
     const form = formidable({
@@ -31,10 +28,8 @@ function parseForm(req) {
       keepExtensions: true,
       multiples: false,
     });
-
     form.parse(req, (err, fields, files) => {
       if (err) {
-        // formidable throws a specific error code for files that exceed the limit
         if (err.code === 1009 || (err.message && err.message.includes('maxFileSize'))) {
           return reject(new Error('FILE_TOO_LARGE'));
         }
@@ -45,41 +40,34 @@ function parseForm(req) {
   });
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   setCorsHeaders(res);
 
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // ── GET — return status of stored custom knowledge ──────────────────────────
+  // ── GET — check if custom knowledge exists ──────────────────────────────────
   if (req.method === 'GET') {
     try {
-      const stored = await kv.get('custom_knowledge');
-      if (!stored) {
-        return res.status(200).json({ hasCustomData: false, characters: 0 });
-      }
-      return res
-        .status(200)
-        .json({ hasCustomData: true, characters: stored.length });
-    } catch (err) {
-      console.error('[UPLOAD GET] KV error:', err.message);
-      return res.status(500).json({ error: 'Failed to check custom knowledge.' });
+      const { blobs } = await list({ prefix: BLOB_FILENAME });
+      if (!blobs.length) return res.status(200).json({ hasCustomData: false, characters: 0 });
+      const response = await fetch(blobs[0].url);
+      const text = await response.text();
+      return res.status(200).json({ hasCustomData: true, characters: text.length });
+    } catch {
+      return res.status(200).json({ hasCustomData: false, characters: 0 });
     }
   }
 
-  // ── POST — accept, parse, and store a file ──────────────────────────────────
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ── POST — upload, parse, and store file ────────────────────────────────────
   let tempFilePath = null;
 
   try {
     const { files } = await parseForm(req);
 
-    // formidable v3 wraps each field in an array
     const fileField = files.file;
     const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
 
@@ -90,20 +78,23 @@ export default async function handler(req, res) {
     tempFilePath = uploadedFile.filepath;
     const mimetype = uploadedFile.mimetype || '';
 
-    // Validate file type
     if (!ACCEPTED_TYPES.includes(mimetype)) {
       return res.status(400).json({
         error: `Unsupported file type: ${mimetype}. Please upload a PDF, TXT, or CSV file.`,
       });
     }
 
-    // Parse the file into plain text
     const parsedText = await parseFile(tempFilePath, mimetype);
 
-    // Store in Vercel KV
-    await kv.set('custom_knowledge', parsedText);
+    // Save parsed text to Vercel Blob — addRandomSuffix false so it always
+    // overwrites the same file when a new one is uploaded
+    await put(BLOB_FILENAME, parsedText, {
+      access: 'public',
+      contentType: 'text/plain',
+      addRandomSuffix: false,
+    });
 
-    console.log(`[UPLOAD] File stored successfully — ${parsedText.length} characters`);
+    console.log(`[UPLOAD] Stored in Blob — ${parsedText.length} characters`);
 
     return res.status(200).json({
       success: true,
@@ -117,13 +108,10 @@ export default async function handler(req, res) {
     console.error('[UPLOAD POST] Error:', err.message);
     return res.status(500).json({ error: 'Failed to process the uploaded file. Please try again.' });
   } finally {
-    // Clean up temp file regardless of outcome
     if (tempFilePath) {
-      fs.unlink(tempFilePath, (unlinkErr) => {
-        if (unlinkErr) {
-          console.warn('[UPLOAD] Could not delete temp file:', unlinkErr.message);
-        }
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.warn('[UPLOAD] Could not delete temp file:', err.message);
       });
     }
   }
-}
+};
