@@ -107,6 +107,8 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     console.error('[CHAT] Unexpected error:', err.message);
+    console.error('[CHAT] Stack:', err.stack);
+    console.error('[CHAT] GEMINI_API_KEY present:', !!process.env.GEMINI_API_KEY);
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }

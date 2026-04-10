@@ -48,6 +48,11 @@ YOUR RULES:
  */
 async function chat(userMessage, history, shopifyProducts, customKnowledge) {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('[GEMINI] GEMINI_API_KEY environment variable is not set!');
+      throw new Error('GEMINI_API_KEY not configured. Please check environment variables.');
+    }
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
